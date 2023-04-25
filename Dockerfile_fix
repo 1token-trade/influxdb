@@ -1,2 +1,3 @@
 FROM influxdb:1.8
-COPY build/* /usr/bin/
+
+COPY ./build/* /usr/bin/
