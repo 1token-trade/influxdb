@@ -1081,11 +1081,6 @@ func (i *Index) assignExistingSeries(shardID uint64, seriesIDSet *tsdb.SeriesIDS
 		} else {
 			// Add the existing series to this shard's bitset, since this may
 			// be the first time the series is added to this shard.
-			if seriesIDSet.TryRLock() {
-				seriesIDSet.RUnlock()
-			} else {
-				fmt.Printf("SeriesIDSet TryRLock failed: %v\n", i.database, i.sfile.Path())
-			}
 			if !seriesIDSet.Contains(ss.ID) {
 				seriesIDSet.Lock()
 				if !seriesIDSet.ContainsNoLock(ss.ID) {
