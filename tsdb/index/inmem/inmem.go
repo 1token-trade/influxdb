@@ -1065,6 +1065,9 @@ func (i *Index) Rebuild() {
 	})
 }
 
+var lockedSeries = sync.Map{}
+var lockedSeriesMu sync.RWMutex
+
 // assignExistingSeries assigns the existing series to shardID and returns the series, names and tags that
 // do not exists yet.
 func (i *Index) assignExistingSeries(shardID uint64, seriesIDSet *tsdb.SeriesIDSet, measurements map[string]int,
@@ -1081,7 +1084,30 @@ func (i *Index) assignExistingSeries(shardID uint64, seriesIDSet *tsdb.SeriesIDS
 		} else {
 			// Add the existing series to this shard's bitset, since this may
 			// be the first time the series is added to this shard.
-			fmt.Println("assignExistingSeries", i.database, i.sfile.Path(), ss.ID, string(key))
+			var lockKey = fmt.Sprintf("%s/%d/%s", i.database, shardID, string(key))
+			lockedSeriesMu.Lock()
+			lockedCount, locked := lockedSeries.Load(lockKey)
+			if locked {
+				fmt.Println("assignExistingSeries", i.database, i.sfile.Path(), ss.ID, string(key), lockedCount)
+				lockedCount = lockedCount.(int) + 1
+				lockedSeries.Store(lockKey, lockedCount)
+			} else {
+				lockedSeries.Store(lockKey, 1)
+			}
+			lockedSeriesMu.Unlock()
+			defer func() {
+				lockedSeriesMu.Lock()
+				lockedCount, locked := lockedSeries.Load(lockKey)
+				if locked {
+					lockedCount = lockedCount.(int) - 1
+					if lockedCount.(int) == 0 {
+						lockedSeries.Delete(lockKey)
+					} else {
+						lockedSeries.Store(lockKey, lockedCount)
+					}
+				}
+				lockedSeriesMu.Unlock()
+			}()
 			if !seriesIDSet.Contains(ss.ID) {
 				seriesIDSet.Lock()
 				if !seriesIDSet.ContainsNoLock(ss.ID) {
